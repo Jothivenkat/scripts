@@ -1,0 +1,70 @@
+# !/bin/bash
+# .bash Script to accept an argument from calling utility
+# and compare the values against the contents of Custom
+# attribute EPP_CANCEL.
+# If the value matches the script returns 1, if it does not match,
+# it returns 0
+
+HOSTNAME=$(hostname)
+DATE=$(date)
+echo "Patch Process started on $HOSTNAME at $DATE" 
+
+if [ ! -n "$1" ]
+    then
+    echo "ERROR: Usage: Need to supply current HPSA Software Policy as an argument to this script!"
+    exit 2
+fi
+
+AGENTTOOLSPATH="/opt/opsware/agent_tools"
+IN_ARG="$1"
+echo "INFO: EPP_CANCEL script Software Policy argument supplied is $IN_ARG."
+
+if [ ! -f  /etc/opt/opsware/pytwist/pytwist.conf ]
+    then
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    exit 2
+fi
+
+/etc/opt/opsware/pytwist/pytwist.conf
+if [ $(echo $?) != 0 ]
+    then
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    exit 2
+fi
+
+if [ ! -f  $AGENTTOOLSPATH/get_cust_attr.sh ]
+    then
+    echo "ERROR: $AGENTTOOLSPATH/get_cust_attr.sh not installed."
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    exit 2
+fi
+
+$AGENTTOOLSPATH/get_cust_attr.sh EPP_CANCEL > temp.txt
+if [ $(echo $?) == 1 ];
+    then
+    echo "ERROR: $AGENTTOOLSPATH/get_cust_attr.sh failed."
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    exit 2
+fi
+
+VAR=$(cat temp.txt)
+eppvalue="$VAR"
+errormessage="Could not find custom attribute 'EPP_CANCEL'."
+
+if [ '$IN_ARG' = '$eppvalue' ]
+    then
+    return_code=1
+    echo "ERROR: Custom Attribute value '$eppvalue' matches argument '$IN_ARG', patching will be cancelled!"
+    exit 1
+else
+    return_code=0
+    if [ -z "$eppvalue" ] 
+    then  
+	echo "INFO: Patching will proceed, EPP_CANCEL is empty with no value provided and argument is '$IN_ARG'."
+    elif [ "$eppvalue" = "$errormessage" ] 
+    then 
+	echo "INFO: Patching will proceed, EPP_CANCEL is not present on the server and argument is '$IN_ARG'."	
+    else 
+	echo "INFO: Patching will proceed, EPP_CANCEL is '$eppvalue' and argument is '$IN_ARG'."
+    fi
+fi

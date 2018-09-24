@@ -1,0 +1,28 @@
+#!/opt/opsware/bin/python
+# EPP_Linux_Diskspace_Script.py
+#This PreCheck script checks the free diskspace on root FS on a RedHat server
+#is at least 5GB, if not script returns 1 and fails.
+
+import sys
+import os
+sys.path.append("/opt/opsware/pylibs")
+
+#Check disk space on root:
+def diskspace_root():
+  (sin, sout, serr) = os.popen3("df -h | grep root | awk '{print $4}' |cut -dG -f1")
+  output_value = int(sout.readlines()[0])
+
+  if output_value > 5:
+    print "Available disk space (in GBs): " + str(output_value)
+    return 0
+  else:
+    print "Not enough disk space available."
+    return 1
+
+def main():
+  count = diskspace_root()
+
+  return count
+
+if __name__ == "__main__":
+    sys.exit(main())
