@@ -1,0 +1,66 @@
+:: .BAT Script to accept an argument from calling utility
+:: and compare the values against the contents of Custom
+:: attribute EPP_CANCEL.
+:: If the value matches the script returns 1, if it does not match,
+:: it returns 0
+
+@echo off
+
+for /f "skip=1 delims=" %%A in (
+  'wmic computersystem get name'
+) do for /f "delims=" %%B in ("%%A") do set "compName=%%A"
+
+echo "Patch process started on %compName% on %DATE% %TIME%."
+
+if [%1]==[] (
+    echo "ERROR: Usage: Need to supply current HPSA Software Policy as an argument to this script!"
+    EXIT /b 2
+)
+
+SET IN_ARG=%1
+echo "INFO: EPP_CANCEL script Software Policy argument supplied is %IN_ARG%."
+
+if NOT EXIST "C:\Program Files\Common Files\Opsware\etc\pytwist\pytwist_conf.bat" (
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    EXIT /b 2
+)
+
+call "C:\Program Files\Common Files\Opsware\etc\pytwist\pytwist_conf.bat"
+
+if NOT %ERRORLEVEL%==0 (
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    EXIT /b 2
+)
+
+if NOT EXIST "%AGENTTOOLSPATH%get_cust_attr.bat" (
+    echo "ERROR: %AGENTTOOLSPATH%get_cust_attr.bat not installed."
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    EXIT /b 2
+)
+
+CALL "%AGENTTOOLSPATH%get_cust_attr.bat" "EPP_CANCEL" > temp.txt
+if %ERRORLEVEL%==1 (
+    echo "ERROR: %AGENTTOOLSPATH%get_cust_attr.bat failed."
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    EXIT /b 2
+)
+
+SET /p VAR=<temp.txt
+
+SET eppvalue="%VAR%"
+SET errormessage="Could not find custom attribute 'EPP_CANCEL'."
+
+if %IN_ARG%==%eppvalue% (
+    SET return_code=1
+    echo "ERROR: Custom Attribute value %eppvalue% matches argument %IN_ARG%, patching will be cancelled!"
+    exit /b 1
+) else (
+    SET return_code=0
+    if %eppvalue%=="" (
+    echo "INFO: Patching will proceed, EPP_CANCEL is empty with no value provided and argument is %IN_ARG%."
+    ) else if %errormessage%==%eppvalue% (
+    echo "INFO: Patching will proceed, EPP_CANCEL is not present on the server and argument is %IN_ARG%."
+    ) else (
+    echo "INFO: Patching will proceed, EPP_CANCEL is %eppvalue% and argument is %IN_ARG%."
+    )
+)

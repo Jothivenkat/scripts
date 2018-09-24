@@ -1,0 +1,149 @@
+#Function:Script to update registry in client for client side targeting
+#purpose: Update registry in client for client side targeting
+#Created by: Microfocus
+#Modified by: Microfocus
+#Version: 1.0
+#Date: 19/04/2018
+
+###### Getting values of wsusServerVal and targetGroupVal from the Custom Attributes:
+###### FACILITY_CUSTOM_ATTRIBUTE_WSUS_SERVER and CUSTOMER_SHORT_NAME on the server
+$wsusServerVal = cmd /c "C:\Program Files\Opsware\agent_tools\get_cust_attr.bat" FACILITY_CUSTOM_ATTRIBUTE_WSUS_SERVER
+$targetGroupVal = cmd /c "C:\Program Files\Opsware\agent_tools\get_cust_attr.bat" CUSTOMER_SHORT_NAME
+
+$wsusCAErrorMessage = "Could not find custom attribute 'FACILITY_CUSTOM_ATTRIBUTE_WSUS_SERVER'."
+$groupCAErrorMessage = "Could not find custom attribute 'CUSTOMER_SHORT_NAME'."
+
+###### Checking if the $wsusServerVal value is null ##########
+if ([string]::IsNullOrWhiteSpace($wsusServerVal))
+	{
+	#Write-Output "No WSUS Server is presented"
+		echo "No WSUS Server is presented.. Skipping!!" 
+		Exit 1
+	}
+	
+###### Checking if the $targetGroupVal value is null ##########
+if ([string]::IsNullOrWhiteSpace($targetGroupVal))
+	{
+	#Write-Output "No TargetGroup is presented"
+		echo "No TargetGroup is presented.. Skipping!!" 
+		Exit 1
+	}
+	
+###### Checking if the $wsusServerVal value is equal to $wsusCAErrorMessage ##########
+if ($wsusServerVal -eq $wsusCAErrorMessage)   
+	{
+	#Write-Output "No WSUS Server is presented"
+		echo "Custom Attribute is missing. No WSUS Server is presented.. Skipping!!" 
+		Exit 1
+	}
+	
+###### Checking if the $targetGroupVal value is equal to $groupCAErrorMessage ##########
+if ($targetGroupVal -eq $groupCAErrorMessage)   
+	{
+	#Write-Output "No TargetGroup is presented"
+		echo "Custom Attribute is missing. No TargetGroup is presented.. Skipping!!" 
+		Exit 1
+	}
+
+#Names of the Item Property/registry keys in regedit
+$registryPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"       
+$targetGroupEnable = "TargetGroupEnabled"										
+$targetGroup = "TargetGroup"
+$WUServer = "WUServer"
+$WUServerStatus = "WUStatusServer"
+$elevateNonAdmins = "ElevateNonAdmins"
+
+$registryPathAU = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+$useWUServer = "UseWUServer"
+$AUOptions = "AUOptions"
+$scheduledInstallDay = "ScheduledInstallDay"
+$scheduledInstallTime = "ScheduledInstallTime"
+$noAutoUpdate = "NoAutoUpdate"
+$autoInstallMinorUpdates = "AutoInstallMinorUpdates"
+$enableFeatureSoftware = "EnableFeaturedSoftware"
+$autoReboot = "NoAutoRebootWithLoggedOnUsers"
+$defaultShutdown = "NoAUAsDefaultShutdownOption"
+$AUShutdownOption = "NoAUShutdownOption"
+
+
+#Values passed to the registry keys (variables)
+$enabledVal = "1"
+$disabledVal = "0"
+$AUOptionVal = "3" 						#Auto-Download and notify to Install
+$scheduledInstallTimeVal = "3"
+$scheduledInstallDayVal = "0"
+
+#Check for the existence of the path else create the path
+IF(!(Test-Path $registryPath))
+{
+    New-Item -Path $registryPath -Force | Out-Null
+}
+IF(!(Test-Path $registryPathAU))
+{
+    New-Item -Path $registryPathAU -Force | Out-Null
+}
+
+#Complete Registry settings for Client Side Targeting
+		
+New-ItemProperty -Path $registryPath -Name $elevateNonAdmins -Value $disabledVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPath -Name $targetGroup -Value $targetGroupVal `
+        -PropertyType String -Force | Out-Null
+		
+New-ItemProperty -Path $registryPath -Name $targetGroupEnable	-Value $enabledVal `
+        -PropertyType DWORD -Force | Out-Null
+
+New-ItemProperty -Path $registryPath -Name $WUServer -Value $wsusServerVal `
+        -PropertyType String -Force | Out-Null
+		
+New-ItemProperty -Path $registryPath -Name $WUServerStatus -Value $wsusServerVal `
+        -PropertyType String -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $useWUServer -Value $enabledVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $AUOptions	-Value $AUOptionVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $scheduledInstallDay -Value $scheduledInstallDayVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $scheduledInstallTime -Value $scheduledInstallTimeVal `
+        -PropertyType DWORD -Force | Out-Null
+
+New-ItemProperty -Path $registryPathAU -Name $noAutoUpdate -Value $disabledVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $autoInstallMinorUpdates -Value $enabledVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $enableFeatureSoftware -Value $disabledVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $autoReboot -Value $enabledVal `
+        -PropertyType DWORD -Force | Out-Null
+
+New-ItemProperty -Path $registryPathAU -Name $defaultShutdown -Value $disabledVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+New-ItemProperty -Path $registryPathAU -Name $AUShutdownOption -Value $disabledVal `
+        -PropertyType DWORD -Force | Out-Null
+		
+
+#Update and reset the WSUS registry settings and Group Policy		
+gpupdate /force
+
+$serviceStatus = (get-service "wuauserv").Status;
+
+if ($serviceStatus -eq "Running") {
+    net stop wuauserv
+	
+    net start wuauserv
+}
+else {
+    #Could be Stopped, Stopping, Paused, or even Starting...
+    net start wuauserv
+}
+
+wuauclt /resetauthorization /detectnow

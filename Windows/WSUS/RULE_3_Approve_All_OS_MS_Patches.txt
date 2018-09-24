@@ -1,0 +1,134 @@
+#Function: This script will do automation of approving install of all OS and MS Patches
+#purpose: Approving installation of all OS and MS Patches
+#Created by: Microfocus
+#Modified by: Microfocus
+#Version: 1.0
+#Date: 18/04/2018
+
+###### Getting Subgroup names from the arguments passed into the script ##########
+######  Argument format: -groups 'name1','name2' [-creationDate 'mm/dd/yyyy [hh:mm:ss AM/PM]'] ##########
+param (
+	[array] $groups,
+	[string] $creationDate = (Get-Date)
+)
+
+$nonExistentSubgroup = @()
+$existentSubgroup = @()
+
+$ErrorActionPreference = "Stop"            ####### script to stop run further while getting error in any of the line ##############
+$PSDefaultParameterValues['*:ErrorAction']='Stop'
+
+Get-Date
+ 
+###### Checking the $group value is null or white space ##########
+if ([string]::IsNullOrWhiteSpace($groups))
+    { 
+    #Write-Output "No group presented"
+    	echo "Target group is not presented" 
+        echo "No Target group presented"
+        Exit 1
+        
+    }
+
+
+Try
+{
+###### Connecting to WSUS Server ##########
+	echo "Connecting to WSUS Server ..."
+	[void][reflection.assembly]::LoadWithPartialName("Microsoft.UpdateServices.Administration")   
+	$wsus = [Microsoft.UpdateServices.Administration.AdminProxy]::getUpdateServer()
+	echo ""
+	echo "Connected to WSUS Server ..."
+}
+Catch [System.Exception]
+{
+	echo "Failed to connect to the WSUS Server."
+	echo "Please check the connectivity and try again."
+	echo "Error:" $_.Exception.Message
+	
+	Exit 1
+}
+
+Try
+{
+###### Checking if the targetGroup exists ##########
+	#Write-Output "Checking if target group exists..."
+	echo "Checking target group existence..." 
+	
+	foreach ($group in $groups)
+	{
+		$subgroup = $wsus.GetComputerTargetGroups() | Select -unique Name | ? {($_.Name -eq $group)}
+		if ($subgroup -eq $null)   
+  		{
+   		#Write-Output "Presented target group doesn't exist..."
+   	    	    echo "Presented target group ** $group ** doesn't exist..." 
+	    	    $nonExistentSubgroup = $nonExistentSubgroup + "$group"
+   		}
+		else
+		{
+				echo "Presented target group ** $group ** exists..."
+				$existentSubgroup = $existentSubgroup + "$group"
+		}
+	}
+
+###### Selecting all OS, Windows and all application patches ########
+	Try
+	{
+		$updates = $wsus.GetUpdates() | ? {($_.CreationDate -le $creationDate) -and ($_.IsSuperseded -ne "True") -and ($_.PublicationState -eq "Published")}
+	}
+	Catch [System.Exception]
+	{
+		echo "Failed to get updates from WSUS Server."
+		echo "Please make sure WSUS is working properly and try again."
+		echo "Error:" $_.Exception.Message
+	
+		Exit 1			
+	}
+	
+	if ( $updates -ne $Null)
+	{
+		$license = $updates | Where {$_.RequiresLicenseAgreementAcceptance}
+		$license | ForEach {$_.AcceptLicenseAgreement()}
+		foreach ($group in $existentSubgroup)
+		{
+			$wgroup = $wsus.GetComputerTargetGroups() | where {$_.Name -eq $group}
+			foreach ($update in $updates)
+			{
+				###### Approving install of an updates ##########
+				$update.Approve(“Install”,$wgroup) | Out-Null
+			}  
+		}
+	}
+	else
+	{
+		echo "No updates are available to approve.. Skipping!!"
+		
+		Get-Date
+		
+		Exit 0
+	}
+	
+	$date = Get-Date
+	"Approved updates on $date "  
+	foreach ($group in $existentSubgroup)
+	{
+		"Updates have been approved for following groups: $group " 
+	} 
+	"Following updates have been approved:"  
+	$updates | Select Title
+
+	Get-Date 
+	
+	Exit 0
+	
+}
+Catch
+{
+	echo "There was a failure while approving the updates."
+	echo "Please verify in WSUS and try again."
+	Write-Output $_.Exception.Message
+
+	Exit 1
+}
+	
+#### End of Script ####

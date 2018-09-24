@@ -1,0 +1,115 @@
+#Function: This script will check Computer Group and Create Computer SubGroup
+#purpose: Checking computer group and creating computer subgroup
+#Created by: Microfocus
+#Modified by: Microfocus
+#Version: 1.0
+#Date: 18/04/2018
+
+
+###### Getting Group and Subgroup names from the arguments passed into the script ##########
+######  Argument format: -targetGroup 'name1' -targetSubGroups 'name1' ##########
+param (
+	[array] $targetGroup,
+	[array] $targetSubGroups
+)
+
+Get-Date
+
+###### Checking the $targetGroup value is null or white space ##########
+if ([string]::IsNullOrWhiteSpace($targetGroup))
+{ 
+#Write-Output "No target group presented"
+       	echo "No Target group presented .. Skipping!!"
+	Exit 1
+       
+} 
+
+###### Checking the $targetSubGroup value is null or white space ##########
+if ([string]::IsNullOrWhiteSpace($targetSubGroups))
+{ 
+#Write-Output "No Target Subgroup presented"
+       	echo "No Target Subgroup presented.. Skipping!!"
+        Exit 1
+       
+}
+
+Try
+{
+###### Connecting to WSUS Server ##########
+	echo "Connecting to WSUS Server ..."
+	[void][reflection.assembly]::LoadWithPartialName("Microsoft.UpdateServices.Administration")   
+	$wsus = [Microsoft.UpdateServices.Administration.AdminProxy]::getUpdateServer()
+	echo ""
+	echo "Connected to WSUS Server ..."
+}
+Catch [System.Exception]
+{
+	echo "Failed to connect to the WSUS Server."
+	echo "Please check the connectivity and try again."
+	echo "Error:" $_.Exception.Message
+	
+	Exit 1
+}
+
+Try
+{
+###### Checking if the targetGroup exists ##########
+	#Write-Output "Checking if target group exists..."
+	echo "Checking target group existence..." 
+
+	$group = $wsus.GetComputerTargetGroups()| Select -unique Name | ? {($_.Name -eq $targetGroup)}
+
+	if ($group -eq $null)   
+	{
+	#Write-Output "Presented target group doesn't exist..."
+		echo "Presented target group doesn't exist:  $targetGroup"
+   		Exit 1
+  	}
+	else
+	{
+		echo "Presented target group ** $targetGroup ** found"  
+   
+    ###### Checking if the targetSubgroup exists ##########
+		
+		$subgroup = $wsus.GetComputerTargetGroups() | Select -unique Name | ? {($_.Name -eq $targetSubGroups)}
+		if ($subgroup -eq $null)   
+  		{
+   		#Write-Output "Presented target Subgroup doesn't exist..."
+   	    	echo "Presented target group ** $targetSubGroups ** doesn't exist..." 
+			echo ""
+			echo "Creating target group ** $targetSubGroups ** ..."
+             	
+			$targetGroupValidation = $wsus.IsValidComputerTargetGroupName("$targetSubGroups")
+			if ($targetGroupValidation -eq "True")
+            {                   
+            	$wGroup = $wsus.GetComputerTargetGroups() | ? {$_.Name -eq "$targetGroup"}
+	            $wsus.CreateComputerTargetGroup("$targetSubGroups",$wGroup)
+				echo "Target Subgroup ** $targetSubGroups ** created successfully..."
+			}
+			else
+			{
+				echo "Target Subgroup ** $targetSubGroups ** is not valid... Exiting!!"
+				Exit 1
+			}
+		}
+		else
+		{
+			echo "Presented target group ** $targetSubGroups ** already exists... Exiting!!!"
+			Exit 1
+		}
+		
+	}
+	
+	echo "Checking Computer Group, Validating and Creating SubGroups completed successfully"
+	
+	Exit 0
+}
+Catch [System.Exception]
+{
+	echo "Checking Computer Group, Validating and Creating Subgroups failed due to the below error."
+	echo "Error:" $_.Exception.Message
+
+	Exit 1
+}
+	
+#End of Script

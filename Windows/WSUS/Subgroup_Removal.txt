@@ -1,0 +1,42 @@
+#!/opt/opsware/bin/python
+#EPP_Windows_Diskspace_Script.py
+#This PreCheck script checks the free diskspace on C:\ drive on a Windows server
+#is at least 5GB, if not script returns 1 and fails.
+
+import sys
+import os
+sys.path.append("/opt/opsware/pylibs")
+EXIT_SUCCESS = 0
+EXIT_ERROR = 1
+
+#Check disk space on root:
+def diskspace():
+  (sin, sout, serr) = os.popen3("fsutil volume diskfree c:")
+  output_value = long(sout.readlines()[0].split(':')[1])
+  output_value_in_GBs = output_value / 1073741824
+  return output_value_in_GBs
+	
+def main():
+    # Initialize the result to false
+    result = EXIT_ERROR
+    
+    try:
+		diskSpaceGB = diskspace()
+		if diskSpaceGB > 5:
+			message = "Available disk space (in GBs): " + str(diskSpaceGB)
+			result = EXIT_SUCCESS
+		else:
+			message = "Not enough disk space available."
+			result = EXIT_ERROR
+        
+    except Exception, e:
+        message = "Exception: %s\n" % e
+        result = EXIT_ERROR
+    
+    return message, result
+    
+if __name__ == "__main__":
+    message, result = main()
+    if message == "Not enough disk space available.": sys.stderr.write(str(message))
+    else: sys.stdout.write(message)
+    sys.exit(result)

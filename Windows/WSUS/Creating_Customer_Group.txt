@@ -1,0 +1,91 @@
+#Function: This script will check Computer Group existence and if not, Create Computer Group
+#purpose: Checking computer group existence and if not, creating computer group
+#Created by: Microfocus
+#Modified by: Microfocus
+#Version: 1.0
+#Date: 24/04/2018
+
+
+###### Getting Group names from the arguments passed into the script ##########
+######  Argument format: -targetGroups 'name1','name2','name3' ##########
+param (
+	[array] $targetGroups
+)
+
+Get-Date
+
+###### Checking the $targetGroup value is null or white space ##########
+if ([string]::IsNullOrWhiteSpace($targetGroups))
+{ 
+#Write-Output "No target group presented"
+       	echo "No Target group presented .. Skipping!!"
+	Exit 1
+       
+} 
+
+Try
+{
+###### Connecting to WSUS Server ##########
+	echo "Connecting to WSUS Server ..."
+	[void][reflection.assembly]::LoadWithPartialName("Microsoft.UpdateServices.Administration")   
+	$wsus = [Microsoft.UpdateServices.Administration.AdminProxy]::getUpdateServer()
+	echo ""
+	echo "Connected to WSUS Server ..."
+}
+Catch [System.Exception]
+{
+	echo "Failed to connect to the WSUS Server."
+	echo "Please check the connectivity and try again."
+	echo "Error:" $_.Exception.Message
+	
+	Exit 1
+}
+
+Try
+{
+###### Checking if the targetGroup exists ##########
+	#Write-Output "Checking if target group exists..."
+	echo "Checking target group existence and if not, creating it..." 
+
+###### Checking if the targetgroup exists ##########
+	foreach ($targetGroup in $targetGroups)
+	{
+
+		$group = $wsus.GetComputerTargetGroups() | Select -unique Name | ? {($_.Name -eq $targetGroup)}
+		if ($group -eq $null)   
+  		{
+   		#Write-Output "Presented target group doesn't exist..."
+   	    	echo "Presented target group ** $targetGroup ** doesn't exist..." 
+			echo ""
+			echo "Creating target group ** $targetGroup ** ..."
+           		
+			$targetGroupValidation = $wsus.IsValidComputerTargetGroupName("$targetGroup")
+			if ($targetGroupValidation -eq "True")
+           	{                   
+          		$wsus.CreateComputerTargetGroup("$targetGroup")
+				echo "Target group ** $targetGroup ** created successfully..."
+			}
+			else
+			{
+				echo "Target group ** $targetGroup ** is not valid... Skipping!!"
+			}
+		}
+		else
+		{
+			echo "Presented target group ** $targetGroup ** already exists... Skipping!!!"
+		}
+	}
+	
+	echo "Checking Computer Groups, Validating and Creating Groups completed successfully"
+	
+	Exit 0
+}
+Catch [System.Exception]
+{
+	echo "Checking Computer Group, Validating and Creating Groups failed due to the below error."
+	echo "Error:" $_.Exception.Message
+
+	Exit 1
+}
+	
+#### End of Script ####

@@ -1,0 +1,161 @@
+#Function: This script will do automation of approving install of specifc KBs Patches
+#purpose: Approving installation of specifc KBs Patches
+#Created by: Microfocus
+#Modified by: Microfocus
+#Version: 1.0
+#Date: 18/04/2018
+
+###### Getting Subgroup names from the arguments passed into the script ##########
+######  Argument format: -groups 'name1','name2' -kbNumberList 'name1','name2' ##########
+param (
+	[array] $groups,
+	[array] $kbNumberList
+
+)
+
+$nonExistentSubgroup = @()
+$existentSubgroup = @()
+$nonExistentKBAs = @()
+$approvedKBAs = @()
+$count = 0
+
+$ErrorActionPreference = "Stop"            ####### script to stop run further while getting error in any of the line ##############
+$PSDefaultParameterValues['*:ErrorAction']='Stop'
+
+Get-Date
+ 
+###### Checking if the $group value is null or white space ##########
+if ([string]::IsNullOrWhiteSpace($groups))
+    { 
+    #Write-Output "No group presented" 
+        echo "No Target group presented.. Skipping!!"
+        Exit 1
+        
+    }
+
+
+###### Checking if the $kbNumberList value is null ##########
+if ([string]::IsNullOrWhiteSpace($kbNumberList))  
+	{
+	#Write-Output "No KBs are presented"
+		echo "No KBs are presented.. No updates to approve.. Skipping!!" 
+		Exit 1
+	}
+
+Try
+{
+###### Connecting to WSUS Server ##########
+	echo "Connecting to WSUS Server ..."
+	[void][reflection.assembly]::LoadWithPartialName("Microsoft.UpdateServices.Administration")   
+	$wsus = [Microsoft.UpdateServices.Administration.AdminProxy]::getUpdateServer()
+	echo ""
+	echo "Connected to WSUS Server ..."
+}
+Catch [System.Exception]
+{
+	echo "Failed to connect to the WSUS Server."
+	echo "Please check the connectivity and try again."
+	echo "Error:" $_.Exception.Message
+	
+	Exit 1
+}
+
+Try
+{
+###### Checking if the targetGroup exists ##########
+	#Write-Output "Checking if target group exists..."
+	echo "Checking target group existence..." 
+	
+	foreach ($group in $groups)
+	{
+
+		$subgroup = $wsus.GetComputerTargetGroups() | Select -unique Name | ? {($_.Name -eq $group)}
+		if ($subgroup -eq $null)   
+  		{
+   		#Write-Output "Presented target group doesn't exist..."
+   	    	    echo "Presented target group ** $group ** doesn't exist..." 
+	    	    $nonExistentSubgroup = $nonExistentSubgroup + "$group"
+   		}
+		else
+		{
+		    echo "Presented target group ** $group ** exists..."
+		    $existentSubgroup = $existentSubgroup + "$group"
+		}
+	}
+
+###### Approving Updates for each KB provided ########
+	foreach ($KB in $kbNumberList)
+	{
+		Try
+		{
+			$updates = $wsus.GetUpdates() | ? {($_.KnowledgebaseArticles -eq $KB)}
+		}
+		Catch [System.Exception]
+		{
+			echo "Failed to get updates from WSUS Server."
+			echo "Please make sure WSUS is working properly and try again."
+			echo "Error:" $_.Exception.Message
+	
+			Exit 1
+		}
+		
+		if ( $updates -ne $Null)
+		{
+			$license = $updates | Where {$_.RequiresLicenseAgreementAcceptance}
+			$license | ForEach {$_.AcceptLicenseAgreement()}
+			foreach ($group in $existentSubgroup)
+			{
+				$wgroup = $wsus.GetComputerTargetGroups() | where {$_.Name -eq $group}
+			
+				###### Approving install of an updates ##########
+				$updates.Approve(“Install”,$wgroup) | Out-Null
+				$approvedKBAs = $approvedKBAs + "$KB"
+			}  
+		}
+		else
+		{
+			$nonExistentKBAs = $nonExistentKBAs + "$KB"
+		}
+	}
+	
+	$date = Get-Date
+		
+	if($nonExistentKBAs)
+    {
+		echo "List of Non-Existent KBAs:  $nonExistentKBAs"
+    } 
+	
+	if($approvedKBAs)
+    {
+		"Approved updates on $date" 
+		foreach ($group in $existentSubgroup)
+		{
+			"Updates have been approved for following groups: $group" 
+		}	 
+		"Following updates have been approved:"
+		foreach ($KBA in $approvedKBAs)
+        {
+            $wsus.GetUpdates() | ? {($_.KnowledgebaseArticles -eq $KBA)} | Select Title
+        } 
+    } 
+
+	Get-Date
+	
+	if($nonExistentKBAs)
+    {
+		Exit 2
+    } 
+	
+	Exit 0
+	
+}
+Catch
+{
+	echo "There was a failure while approving the updates."
+	echo "Please verify in WSUS and try again."
+	Write-Output $_.Exception.Message
+
+	Exit 1
+}
+	
+#### End of Script ####
