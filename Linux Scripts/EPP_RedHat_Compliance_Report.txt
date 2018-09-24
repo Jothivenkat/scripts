@@ -1,0 +1,33 @@
+#!/opt/opsware/bin/python
+# EPP_RedHat_Compliance_Report.py
+# This script outputs the compliance status of the RedHat server.
+#"yum updateinfo list security all | grep -i low | awk '{print $1}' | grep RHSA|sort -u"
+
+import sys
+import os
+sys.path.append("/opt/opsware/pylibs")
+
+compDict = dict()
+countDict = dict()
+severityList = ["Critical", "Important", "Moderate", "Low"]
+listCommand = "yum updateinfo list security all"
+
+for severity in severityList:
+	command = listCommand + " | grep -i " + severity + " | awk '{print $1}' | grep RHSA|sort -u"
+	(sin, sout, serr) = os.popen3(command)
+	compDict["M_" + severity] = ";".join([line.rstrip('\r\n') for line in sout.readlines()])
+
+for severity in severityList:
+	command = listCommand + " | grep -i " + severity + " | awk '{print $2}' | grep RHSA|sort -u"
+	(sin, sout, serr) = os.popen3(command)
+	compDict["I_" + severity] = ";".join([line.rstrip('\r\n') for line in sout.readlines()])
+
+(sin, sout, serr) = os.popen3("hostname")
+serverName = sout.readlines()[0][:-1]
+
+print "&&&&"
+#print "Server Name,Installed_Critical,Installed_Important,Installed_Moderate,Installed_Low,Missing_Critical,Missing_Important,Missing_Moderate,Missing_Low"
+print "%s,[%s],[%s],[%s],[%s],[%s],[%s],[%s],[%s]" % (serverName,compDict["I_Critical"],compDict["I_Important"],compDict["I_Moderate"],compDict["I_Low"],\
+		compDict["M_Critical"],compDict["M_Important"],compDict["M_Moderate"],compDict["M_Low"])	
+
+print "%%%%"

@@ -1,0 +1,143 @@
+#!/bin/bash
+# YUM_Install_Single_OS_Patch_Level.sh
+# Intended use for this script:
+#	Used within HPSA policies to apply only Security Patches.
+#	yum localupdate /home/local_patches/*.rpm -y
+
+#Get the value for Reboot method from Custom Attribute 'EPP_REBOOT'
+AGENTTOOLSPATH="/opt/opsware/agent_tools"
+$AGENTTOOLSPATH/get_cust_attr.sh EPP_REBOOT > temp.txt
+if [ $(echo $?) == 1 ];
+    then
+    echo "ERROR: $AGENTTOOLSPATH/get_cust_attr.sh failed."
+    echo "ERROR: Agent Tools not installed, patching will not proceed."
+    exit 2
+fi
+
+VAR=$(cat temp.txt)
+reboot="$VAR"
+
+echo "INFO:   YUM_Install_Single_OS_Patch_Level.sh script details and output"
+echo $(date +%F" "%T" "%Z)
+echo ""
+
+function cleanup_existing_YUM_repos
+{
+	#############
+	# This function was created to clean up yum and updating yum repolist
+	#############
+
+	echo "###========" 
+	echo "INFO:   In the cleanup_existing_YUM_repos function"
+	echo ""
+
+	# Cleanup yum: 'yum clean all'
+	echo "Cleaning current yum..."
+	yum clean all
+	echo ""
+
+	# Remove yum cache: 'rm -rf /var/cache/yum'
+	echo "Removing yum cache..."
+	rm -rf /var/cache/yum
+	echo ""
+
+	# Update yum repolist: 'yum repolist'
+	echo "INFO:   Current YUM repolist:"
+	yum repolist
+	echo ""
+	
+}
+
+function list_available_YUM_updates
+{
+	#############
+	# This function was created to list all the available RHEL patches
+	#############
+
+	echo "###========"
+        echo "INFO:   In the list_available_YUM_updates function"
+	echo ""
+
+	#List all available patches: 'yum list updates'	
+	echo "Listing all the available RHEL patches..."
+	yum list updates
+	echo ""
+
+}
+
+function install_YUM_patches
+{
+	#############
+	# This function was created to install the RHEL patches
+	#############
+
+	echo "###========"
+    echo "INFO:   In the install_YUM_patches function"
+	echo ""
+
+	# Installing all local OS patches: 'yum localupdate /home/local_patches/*.rpm -y'
+	echo "Starting to install the RHEL OS patches with the following cmd: "
+	echo "yum localupdate /home/local_patches/*.rpm -y"
+
+	yum localupdate /home/local_patches/*.rpm -y
+	if [ $(echo $?) != 0 ];
+    then
+        echo "ERROR:  FAILED to run the 1st 'yum localupdate /home/local_patches/*.rpm -y' command to install the RHEL patches..." 
+	else
+		echo "SUCCESS:  Successfully ran the 'yum localupdate /home/local_patches/*.rpm -y' command to install the RHEL patches..."
+	fi	
+
+	echo ""
+	# Run 'yum localupdate /home/local_patches/*.rpm -y' a second time to validate everything was installed
+	echo "Running the 'yum localupdate /home/local_patches/*.rpm -y' a second time... again using the following cmd: "
+    echo "yum localupdate /home/local_patches/*.rpm -y"
+
+    yum localupdate /home/local_patches/*.rpm -y
+    if [ $(echo $?) != 0 ];
+    then
+        echo "ERROR:  FAILED to run the 2nd 'yum localupdate /home/local_patches/*.rpm -y' command to install the RHEL patches..."
+    else
+        echo "SUCCESS:  Successfully ran the 2nd 'yum localupdate /home/local_patches/*.rpm -y' command to install the RHEL patches..."
+    fi
+
+	echo ""
+	# Run the 'yum localupdate /home/local_patches/*.rpm -y' to look for the words 'Nothing to do' as the last line of output
+	echo "Running the 'yum localupdate /home/local_patches/*.rpm -y' to look for the words 'Nothing to do' as the last line of output"
+	echo "yum localupdate /home/local_patches/*.rpm -y | tail -2 | grep -i 'Nothing to do' "
+	yum localupdate /home/local_patches/*.rpm -y | tail -2 | grep -i "Nothing to do"
+    if [ $(echo $?) != 0 ];
+    then
+		echo "ERROR:  FAILED to receive the 'Nothing to do' message from YUM... (more work to do...) " 
+		exit 1
+    else
+        echo "SUCCESS:  Successfully installed all local OS Patches..."
+    fi
+
+	echo ""
+
+}
+
+# Call function to clean up yum and update yum repolist
+cleanup_existing_YUM_repos
+
+# Call a function to list all the available RHEL updates
+list_available_YUM_updates
+
+# Call a function to install the patches and update the server...
+install_YUM_patches
+
+# Check if reboot required
+if [ "$reboot" = "at_end" ]
+	then
+	echo "Rebooting Server"
+	echo "OPSW_REBOOT"
+	echo "Reboot Command Executed"
+	echo ""
+fi
+
+HOSTNAME=$(hostname)
+DATE=$(date)
+echo "Patch Process completed on $HOSTNAME at $DATE"
+echo "DONE:   Finished with this script..."
+
+exit 0
